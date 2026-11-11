@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Music</title>
+<style>
+:root{--bg:#e9edf5;--surface:#fff;--ink:#14182b;--muted:#5d647d;--accent:#2f4bff;--line:#d3d9e8}
+*{box-sizing:border-box;margin:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);padding:16px;max-width:880px;margin:0 auto}
+h1{font-size:1.5rem;font-weight:700;margin:6px 0 14px}
+form{display:flex;gap:8px;margin-bottom:14px}
+input{flex:1;min-width:0;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:1rem}
+button{padding:12px 18px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;font-size:1rem;cursor:pointer}
+button:focus-visible,input:focus-visible,.song:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+#bar{position:sticky;top:0;z-index:5;background:var(--bg);padding:6px 0 12px}
+#box{width:100%;max-width:420px;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#000}
+#now{margin:8px 0;font-weight:600}
+.ctrl{display:flex;gap:8px}
+.ctrl button{background:var(--surface);color:var(--ink);border:1px solid var(--line);padding:8px 16px}
+.song{display:flex;gap:12px;align-items:center;padding:8px;border-radius:10px;cursor:pointer}
+.song:hover{background:var(--surface)}
+.song.active{background:var(--surface);box-shadow:inset 4px 0 0 var(--accent)}
+.song img{width:96px;height:54px;object-fit:cover;border-radius:6px;flex:none}
+.song b{display:block;font-size:.95rem;font-weight:600}
+.song small{color:var(--muted)}
+#msg{color:var(--muted);padding:8px}
+</style>
+</head>
+<body>
+<h1>My Music</h1>
+<form id="f">
+  <input id="q" type="search" placeholder="Search a song or artist" aria-label="Search songs" autocomplete="off">
+  <button type="submit">Search</button>
+</form>
+
+<div id="bar">
+  <div id="box"><div id="player"></div></div>
+  <div id="now">Search a song and tap it to play.</div>
+  <div class="ctrl">
+    <button type="button" id="prev">Previous</button>
+    <button type="button" id="next">Next</button>
+  </div>
+</div>
+
+<div id="msg"></div>
+<div id="list"></div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+const API_KEY = 'PASTE_YOUR_YOUTUBE_API_KEY_HERE';
+
+let player, songs = [], idx = -1;
+const $ = s => document.querySelector(s);
+const decode = t => { const e = document.createElement('textarea'); e.innerHTML = t; return e.value; };
+
+function onYouTubeIframeAPIReady() {
+  player = new YT.Player('player', {
+    width: '100%', height: '100%',
+    playerVars: { playsinline: 1 },
+    events: { onStateChange: e => { if (e.data === YT.PlayerState.ENDED) play(idx + 1); } }
+  });
+}
+
+$('#f').addEventListener('submit', async e => {
+  e.preventDefault();
+  const q = $('#q').value.trim();
+  if (!q) return;
+  $('#msg').textContent = 'Searching...';
+  try {
+    const u = new URL('https://www.googleapis.com/youtube/v3/search');
+    u.search = new URLSearchParams({
+      part: 'snippet', q, type: 'video', videoCategoryId: '10',
+      videoEmbeddable: 'true', maxResults: 20, key: API_KEY
+    });
+    const d = await (await fetch(u)).json();
+    if (d.error) throw new Error(d.error.message);
+    songs = d.items.map(i => ({
+      id: i.id.videoId,
+      title: decode(i.snippet.title),
+      channel: decode(i.snippet.channelTitle),
+      img: i.snippet.thumbnails.medium.url
+    }));
+    idx = -1;
+    render();
+    $('#msg').textContent = songs.length ? '' : 'No songs found. Try another search.';
+  } catch (err) {
+    $('#msg').textContent = 'Search failed: ' + err.message;
+  }
+});
+
+function render() {
+  const list = $('#list');
+  list.innerHTML = '';
+  songs.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'song';
+    row.tabIndex = 0;
+    row.dataset.i = i;
+    const img = document.createElement('img');
+    img.src = s.img; img.alt = '';
+    const info = document.createElement('div');
+    const b = document.createElement('b'); b.textContent = s.title;
+    const small = document.createElement('small'); small.textContent = s.channel;
+    info.append(b, small);
+    row.append(img, info);
+    row.addEventListener('click', () => play(i));
+    row.addEventListener('keydown', ev => { if (ev.key === 'Enter') play(i); });
+    list.append(row);
+  });
+}
+
+function play(i) {
+  if (!player || i < 0 || i >= songs.length) return;
+  idx = i;
+  player.loadVideoById(songs[i].id);
+  $('#now').textContent = songs[i].title;
+  document.querySelectorAll('.song').forEach(r => r.classList.toggle('active', +r.dataset.i === i));
+}
+
+$('#next').addEventListener('click', () => play(idx + 1));
+$('#prev').addEventListener('click', () => play(idx - 1));
+</script>
+</body>
+</html>
